@@ -360,6 +360,16 @@ export default function CashFlowApp() {
     { id: 2, role: 'On-site Coord', count: 1, rate: 35, hours: 10, wrapRate: 1.0 }
   ]);
 
+  // Goal Seek State
+  const [goalSeekConstraints, setGoalSeekConstraints] = useState({
+    maxPeakOutlay: 50000000, // $50M default (more realistic)
+    breakEvenByDate: '2035-01-01', // After the simulation period
+    minTotalProfit: 1000000, // $1M default (more achievable)
+    maxFloatDuration: 200 // days (more realistic)
+  });
+  const [goalSeekResults, setGoalSeekResults] = useState(null);
+  const [isSolving, setIsSolving] = useState(false);
+
   const costColors = {
     Food: '#3b82f6', Lodging: '#8b5cf6', Childcare: '#ec4899', Curriculum: '#10b981', 
     Meeting_Space: '#f59e0b', AV: '#6366f1', Transportation: '#06b6d4', Other: '#94a3b8', Labor: '#ef4444' 
@@ -705,6 +715,379 @@ export default function CashFlowApp() {
     setLaborCosts(laborCosts.filter(item => item.id !== id));
   };
 
+  // Goal Seek Solver
+  const runGoalSeek = () => {
+    setIsSolving(true);
+
+    // Use setTimeout to avoid blocking UI
+    setTimeout(() => {
+      const validSolutions = [];
+      const testCount = { tested: 0, valid: 0 };
+      const TARGET_SOLUTIONS = 20;
+
+      // Define parameter ranges to test
+      const delayOptions = [30, 60, 90, 120, 150];
+      const feeOptions = [2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0];
+      const volumeOptions = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
+
+      // Labor scaling factors (multiplier for headcount based on volume)
+      const laborScaleOptions = [1.0, 1.2, 1.5, 2.0];
+
+      // Wrap rate options
+      const wrapRateOptions = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5];
+
+      // LCAT (Labor Category) rate adjustments
+      const lcatRateMultipliers = [0.8, 0.9, 1.0, 1.1, 1.2];
+
+      // Strategy-based diversification: track which strategy each solution uses
+      const strategies = {
+        'low-labor': [], // Low labor scale + low LCAT
+        'high-fee': [], // Higher fee percentages
+        'low-volume': [], // Lower event volume
+        'fast-reimburse': [], // Shorter delay times
+        'balanced': [] // Mix of moderate values
+      };
+
+      // Helper to determine solution strategy
+      const categorizeStrategy = (params) => {
+        if (params.laborScale <= 1.2 && params.lcatMult <= 0.9) return 'low-labor';
+        if (params.fee >= 4.0) return 'high-fee';
+        if (params.volume <= 400) return 'low-volume';
+        if (params.delay <= 60) return 'fast-reimburse';
+        return 'balanced';
+      };
+
+      // Early stopping flag
+      let shouldStop = false;
+
+      // Sample subset to keep runtime reasonable (test every 2nd option for some params)
+      outerLoop:
+      for (let delay of delayOptions) {
+        for (let fee of feeOptions) {
+          for (let volume of volumeOptions.filter((_, i) => i % 2 === 0)) {
+            for (let laborScale of laborScaleOptions) {
+              for (let wrapRate of wrapRateOptions.filter((_, i) => i % 2 === 0)) {
+                for (let lcatMult of lcatRateMultipliers.filter((_, i) => i % 2 === 0)) {
+
+                  testCount.tested++;
+
+                  // Build scaled labor costs
+                  const scaledLabor = laborCosts.map(role => ({
+                    ...role,
+                    count: Math.ceil(role.count * laborScale),
+                    rate: role.rate * lcatMult,
+                    wrapRate: wrapRate
+                  }));
+
+                  // Calculate total labor with these parameters
+                  const testLaborCost = scaledLabor.reduce((acc, item) => {
+                    return acc + (item.count * item.rate * item.hours * item.wrapRate);
+                  }, 0);
+
+                  // Build test event mix with updated labor
+                  const testEventMix = {
+                    Basic: { ...eventMix.Basic, labor: testLaborCost * 0.5 },
+                    Standard: { ...eventMix.Standard, labor: testLaborCost },
+                    Specialized: { ...eventMix.Specialized, labor: testLaborCost * 2 }
+                  };
+
+                  // Run simulation with these parameters
+                  const result = simulateScenario({
+                    eventMixParam: testEventMix,
+                    eventsPerMonthParam: volume,
+                    delayDaysParam: delay,
+                    feePercentParam: fee,
+                    stdDevPercentParam: stdDevPercent
+                  });
+
+                  if (!result) continue;
+
+                  // Check constraints
+                  const meetsConstraints = checkConstraints(result, {
+                    delay,
+                    fee,
+                    volume,
+                    laborScale,
+                    wrapRate,
+                    lcatMult,
+                    scaledLabor
+                  });
+
+                  if (meetsConstraints) {
+                    testCount.valid++;
+                    const solution = {
+                      parameters: {
+                        delay,
+                        fee,
+                        volume,
+                        laborScale,
+                        wrapRate,
+                        lcatMult,
+                        scaledLabor
+                      },
+                      results: result,
+                      score: calculateScore(result)
+                    };
+
+                    // Categorize and store by strategy
+                    const strategy = categorizeStrategy(solution.parameters);
+                    solution.strategy = strategy;
+
+                    if (!strategies[strategy]) strategies[strategy] = [];
+                    strategies[strategy].push(solution);
+
+                    validSolutions.push(solution);
+
+                    // Early stopping: once we have TARGET_SOLUTIONS, stop searching
+                    if (validSolutions.length >= TARGET_SOLUTIONS) {
+                      shouldStop = true;
+                      break outerLoop;
+                    }
+                  }
+                }
+                if (shouldStop) break;
+              }
+              if (shouldStop) break;
+            }
+            if (shouldStop) break;
+          }
+          if (shouldStop) break;
+        }
+        if (shouldStop) break;
+      }
+
+      // Diversify solutions: try to get at least 2 from each strategy if possible
+      const diversifiedSolutions = [];
+      const strategyCounts = {};
+
+      // First pass: add best solution from each strategy
+      Object.keys(strategies).forEach(strategy => {
+        if (strategies[strategy].length > 0) {
+          strategies[strategy].sort((a, b) => b.score - a.score);
+          diversifiedSolutions.push(strategies[strategy][0]);
+          strategyCounts[strategy] = 1;
+        }
+      });
+
+      // Second pass: fill remaining slots with next-best from each strategy
+      let currentStrategyIndex = 0;
+      const strategyKeys = Object.keys(strategies).filter(s => strategies[s].length > 0);
+
+      while (diversifiedSolutions.length < Math.min(TARGET_SOLUTIONS, validSolutions.length)) {
+        const strategy = strategyKeys[currentStrategyIndex % strategyKeys.length];
+        const count = strategyCounts[strategy] || 0;
+
+        if (strategies[strategy].length > count) {
+          diversifiedSolutions.push(strategies[strategy][count]);
+          strategyCounts[strategy] = count + 1;
+        }
+
+        currentStrategyIndex++;
+
+        // Prevent infinite loop
+        if (currentStrategyIndex > validSolutions.length * 2) break;
+      }
+
+      // Sort final diversified list by score
+      diversifiedSolutions.sort((a, b) => b.score - a.score);
+
+      // Calculate min/max ranges for parameters across all solutions
+      const paramRanges = calculateParamRanges(diversifiedSolutions);
+
+      console.log('Goal Seek Complete:', {
+        tested: testCount.tested,
+        valid: testCount.valid,
+        solutions: diversifiedSolutions.length,
+        constraints: goalSeekConstraints
+      });
+
+      setGoalSeekResults({
+        solutions: diversifiedSolutions.slice(0, TARGET_SOLUTIONS),
+        stats: testCount,
+        paramRanges,
+        strategies: Object.keys(strategyCounts).map(s => ({ name: s, count: strategyCounts[s] }))
+      });
+      setIsSolving(false);
+    }, 100);
+  };
+
+  // Helper: Calculate min/max ranges for parameters
+  const calculateParamRanges = (solutions) => {
+    if (solutions.length === 0) return null;
+
+    const delays = solutions.map(s => s.parameters.delay);
+    const fees = solutions.map(s => s.parameters.fee);
+    const volumes = solutions.map(s => s.parameters.volume);
+    const laborScales = solutions.map(s => s.parameters.laborScale);
+    const wrapRates = solutions.map(s => s.parameters.wrapRate);
+    const lcatMults = solutions.map(s => s.parameters.lcatMult);
+
+    return {
+      delay: { min: Math.min(...delays), max: Math.max(...delays) },
+      fee: { min: Math.min(...fees), max: Math.max(...fees) },
+      volume: { min: Math.min(...volumes), max: Math.max(...volumes) },
+      laborScale: { min: Math.min(...laborScales), max: Math.max(...laborScales) },
+      wrapRate: { min: Math.min(...wrapRates), max: Math.max(...wrapRates) },
+      lcatMult: { min: Math.min(...lcatMults), max: Math.max(...lcatMults) }
+    };
+  };
+
+  // Helper: Simulate a specific scenario
+  const simulateScenario = ({ eventMixParam, eventsPerMonthParam, delayDaysParam, feePercentParam, stdDevPercentParam }) => {
+    try {
+      const sampleEvents = [];
+      const startYear = 2026;
+      const endYear = 2031;
+      const eventsPerYear = eventsPerMonthParam * 12;
+
+      const totalPct = eventMixParam.Basic.pct + eventMixParam.Standard.pct + eventMixParam.Specialized.pct;
+      const safeTotal = totalPct === 0 ? 1 : totalPct;
+      const basicThresh = eventMixParam.Basic.pct / safeTotal;
+      const standardThresh = (eventMixParam.Basic.pct + eventMixParam.Standard.pct) / safeTotal;
+
+      for (let year = startYear; year <= endYear; year++) {
+        for (let i = 0; i < eventsPerYear; i++) {
+          const rand = Math.random();
+          let typeKey = 'Specialized';
+          if (rand < basicThresh) typeKey = 'Basic';
+          else if (rand < standardThresh) typeKey = 'Standard';
+
+          const typeData = eventMixParam[typeKey];
+          let breakdownSum = 0;
+          let breakdownObj = {};
+
+          if (typeData.breakdown) {
+            Object.entries(typeData.breakdown).forEach(([k, v]) => {
+              breakdownSum += (v || 0);
+              breakdownObj[k] = (v || 0);
+            });
+          }
+          const laborSum = typeData.labor || 0;
+
+          const z = gaussianRandom();
+          const multiplier = 1 + (z * (stdDevPercentParam / 100));
+          const delayZ = gaussianRandom();
+
+          const scaledODC = {};
+          let odcTotal = 0;
+          Object.entries(breakdownObj).forEach(([key, val]) => {
+            const scaled = val * multiplier;
+            scaledODC[key] = scaled;
+            odcTotal += scaled;
+          });
+          const laborTotal = laborSum * multiplier;
+          const totalCost = odcTotal + laborTotal;
+
+          const dayOfYear = Math.floor((i * 365) / eventsPerYear);
+          const globalDay = (year - startYear) * 365 + dayOfYear;
+
+          sampleEvents.push({
+            d: globalDay,
+            c: totalCost,
+            odcTotal: odcTotal,
+            laborTotal: laborTotal,
+            delayZ
+          });
+        }
+      }
+
+      // Run cash flow simulation
+      const lastEvent = sampleEvents[sampleEvents.length - 1];
+      const maxDay = lastEvent.d + 400;
+      const dailyNetChange = new Float32Array(maxDay + 1);
+      let totalProjectCost = 0;
+      let totalProjectProfit = 0;
+
+      for (let i = 0; i < sampleEvents.length; i++) {
+        const event = sampleEvents[i];
+        const labor = event.laborTotal || 0;
+        const odc = event.odcTotal || 0;
+        const cost = labor + odc;
+        totalProjectCost += cost;
+
+        if (event.d >= 0 && event.d <= maxDay) dailyNetChange[event.d] -= cost;
+
+        const profit = odc * (feePercentParam / 100);
+        totalProjectProfit += profit;
+        const inflow = (labor + odc) + profit;
+
+        const delayZ = event.delayZ || 0;
+        const varianceFactor = 0.25;
+        const actualDelay = Math.max(1, Math.round(delayDaysParam * (1 + delayZ * varianceFactor)));
+        const inflowDay = event.d + actualDelay;
+
+        if (inflowDay <= maxDay) dailyNetChange[inflowDay] += inflow;
+      }
+
+      let currentBalance = 0;
+      let minBalance = 0;
+      let peakDayIndex = 0;
+      let breakEvenDayIndex = -1;
+
+      for (let day = 0; day <= maxDay; day++) {
+        currentBalance += dailyNetChange[day];
+        if (currentBalance < minBalance) { minBalance = currentBalance; peakDayIndex = day; }
+        if (breakEvenDayIndex === -1 && currentBalance > 0 && day > 0) breakEvenDayIndex = day;
+      }
+
+      const avgEventCost = sampleEvents.length > 0 ? totalProjectCost / sampleEvents.length : 0;
+      const avgEventProfit = sampleEvents.length > 0 ? totalProjectProfit / sampleEvents.length : 0;
+      const floatDuration = avgEventProfit > 0 ? (avgEventCost * delayDaysParam) / avgEventProfit : Infinity;
+
+      return {
+        peakOutlay: minBalance,
+        totalProfit: currentBalance,
+        totalProjectCost,
+        breakEvenDayIndex,
+        floatDuration: Math.round(floatDuration),
+        eventCount: sampleEvents.length
+      };
+    } catch (e) {
+      return null;
+    }
+  };
+
+  // Helper: Check if results meet constraints
+  const checkConstraints = (result, params) => {
+    // Peak outlay check (remember it's negative)
+    if (Math.abs(result.peakOutlay) > goalSeekConstraints.maxPeakOutlay) {
+      return false;
+    }
+
+    // Profit check
+    if (result.totalProfit < goalSeekConstraints.minTotalProfit) {
+      return false;
+    }
+
+    // Float duration check (handle Infinity case)
+    if (!isFinite(result.floatDuration) || result.floatDuration > goalSeekConstraints.maxFloatDuration) {
+      return false;
+    }
+
+    // Break even date check
+    if (goalSeekConstraints.breakEvenByDate) {
+      const targetDate = new Date(goalSeekConstraints.breakEvenByDate);
+      const targetYear = targetDate.getFullYear();
+      const targetDay = (targetYear - 2026) * 365 + Math.floor((targetDate.getMonth() * 365) / 12);
+
+      if (result.breakEvenDayIndex === -1 || result.breakEvenDayIndex > targetDay) {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  // Helper: Score solutions (higher is better)
+  const calculateScore = (result) => {
+    // Weighted scoring: prioritize profit, penalize high outlay
+    const profitScore = result.totalProfit / 1000000; // Millions
+    const outlayPenalty = Math.abs(result.peakOutlay) / 1000000; // Millions
+    const floatBonus = Math.max(0, 100 - result.floatDuration); // Prefer shorter float
+
+    return profitScore * 2 - outlayPenalty * 0.5 + floatBonus * 0.1;
+  };
+
   // Views
   const AnalysisView = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -846,6 +1229,418 @@ export default function CashFlowApp() {
     );
   };
 
+  // Goal Seek View
+  const GoalSeekView = () => (
+    <div className="max-w-7xl mx-auto space-y-6">
+      <Card className="p-6">
+        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
+          <div className="p-2 bg-purple-100 rounded-lg text-purple-600">
+            <Activity size={24} />
+          </div>
+          <div>
+            <h3 className="font-semibold text-xl">Goal Seek Solver</h3>
+            <p className="text-sm text-slate-500">Define your outcome goals and find input parameters that achieve them</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div className="space-y-4">
+            <h4 className="font-semibold text-slate-700 flex items-center gap-2">
+              <AlertCircle size={18} className="text-red-500" />
+              Set Your Constraints
+            </h4>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium text-slate-600 block mb-1">
+                  Max Peak Cash Outlay
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1000000"
+                    value={goalSeekConstraints.maxPeakOutlay}
+                    onChange={(e) => setGoalSeekConstraints({
+                      ...goalSeekConstraints,
+                      maxPeakOutlay: parseFloat(e.target.value) || 0
+                    })}
+                    className="flex-1 p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                  />
+                </div>
+                <p className="text-xs text-slate-400 mt-1">Maximum capital you can float</p>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-slate-600 block mb-1">
+                  Minimum Total Profit
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1000000"
+                    value={goalSeekConstraints.minTotalProfit}
+                    onChange={(e) => setGoalSeekConstraints({
+                      ...goalSeekConstraints,
+                      minTotalProfit: parseFloat(e.target.value) || 0
+                    })}
+                    className="flex-1 p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                  />
+                </div>
+                <p className="text-xs text-slate-400 mt-1">Target profit by end of period</p>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-slate-600 block mb-1">
+                  Break Even By Date
+                </label>
+                <input
+                  type="date"
+                  value={goalSeekConstraints.breakEvenByDate}
+                  onChange={(e) => setGoalSeekConstraints({
+                    ...goalSeekConstraints,
+                    breakEvenByDate: e.target.value
+                  })}
+                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+                <p className="text-xs text-slate-400 mt-1">Must be cash-positive before this date</p>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-slate-600 block mb-1">
+                  Max Float Duration (Days)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="365"
+                  value={goalSeekConstraints.maxFloatDuration}
+                  onChange={(e) => setGoalSeekConstraints({
+                    ...goalSeekConstraints,
+                    maxFloatDuration: parseFloat(e.target.value) || 0
+                  })}
+                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+                <p className="text-xs text-slate-400 mt-1">How long cash is tied up per event cycle</p>
+              </div>
+            </div>
+
+            <button
+              onClick={runGoalSeek}
+              disabled={isSolving}
+              className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSolving ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  <span>Searching for solutions...</span>
+                </>
+              ) : (
+                <>
+                  <Activity size={20} />
+                  <span>Find Solutions</span>
+                </>
+              )}
+            </button>
+
+            {goalSeekResults && !isSolving && (
+              <div className="mt-3 text-center text-xs text-slate-500">
+                Last search: {goalSeekResults.stats.tested.toLocaleString()} tested, {goalSeekResults.stats.valid} valid
+              </div>
+            )}
+          </div>
+
+          <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+            <h4 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+              <Info size={18} className="text-indigo-500" />
+              How It Works
+            </h4>
+            <ul className="space-y-2 text-sm text-slate-600">
+              <li className="flex gap-2">
+                <span className="text-purple-500 font-bold">1.</span>
+                <span>The solver tests thousands of parameter combinations</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-purple-500 font-bold">2.</span>
+                <span>Parameters tested: reimbursement delay, service fee %, event volume, labor rates, wrap rates, and headcount scaling</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-purple-500 font-bold">3.</span>
+                <span>Labor automatically scales with event volume (more events = more staff needed)</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-purple-500 font-bold">4.</span>
+                <span>Only solutions meeting ALL constraints are returned</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-purple-500 font-bold">5.</span>
+                <span>Results are ranked by overall score (profit vs. risk balance)</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </Card>
+
+      {goalSeekResults && (
+        <>
+          {goalSeekResults.paramRanges && goalSeekResults.solutions.length > 0 && (
+            <Card className="p-6">
+              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
+                <Info size={20} className="text-indigo-500" />
+                <h3 className="font-semibold text-lg">Parameter Ranges Across Solutions</h3>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <p className="text-xs text-blue-600 font-medium mb-2">Reimbursement Delay</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">Min</p>
+                      <p className="text-lg font-bold text-blue-700">{goalSeekResults.paramRanges.delay.min}d</p>
+                    </div>
+                    <div className="text-slate-300">→</div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-500">Max</p>
+                      <p className="text-lg font-bold text-blue-700">{goalSeekResults.paramRanges.delay.max}d</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-green-50 rounded-lg p-4">
+                  <p className="text-xs text-green-600 font-medium mb-2">Service Fee %</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">Min</p>
+                      <p className="text-lg font-bold text-green-700">{goalSeekResults.paramRanges.fee.min}%</p>
+                    </div>
+                    <div className="text-slate-300">→</div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-500">Max</p>
+                      <p className="text-lg font-bold text-green-700">{goalSeekResults.paramRanges.fee.max}%</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-purple-50 rounded-lg p-4">
+                  <p className="text-xs text-purple-600 font-medium mb-2">Event Volume/Mo</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">Min</p>
+                      <p className="text-lg font-bold text-purple-700">{goalSeekResults.paramRanges.volume.min}</p>
+                    </div>
+                    <div className="text-slate-300">→</div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-500">Max</p>
+                      <p className="text-lg font-bold text-purple-700">{goalSeekResults.paramRanges.volume.max}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-orange-50 rounded-lg p-4">
+                  <p className="text-xs text-orange-600 font-medium mb-2">Labor Scaling</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">Min</p>
+                      <p className="text-lg font-bold text-orange-700">{goalSeekResults.paramRanges.laborScale.min}x</p>
+                    </div>
+                    <div className="text-slate-300">→</div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-500">Max</p>
+                      <p className="text-lg font-bold text-orange-700">{goalSeekResults.paramRanges.laborScale.max}x</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <p className="text-xs text-slate-600 font-medium mb-2">Wrap Rate</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">Min</p>
+                      <p className="text-lg font-bold text-slate-700">{goalSeekResults.paramRanges.wrapRate.min}</p>
+                    </div>
+                    <div className="text-slate-300">→</div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-500">Max</p>
+                      <p className="text-lg font-bold text-slate-700">{goalSeekResults.paramRanges.wrapRate.max}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <p className="text-xs text-slate-600 font-medium mb-2">LCAT Multiplier</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">Min</p>
+                      <p className="text-lg font-bold text-slate-700">{goalSeekResults.paramRanges.lcatMult.min}x</p>
+                    </div>
+                    <div className="text-slate-300">→</div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-500">Max</p>
+                      <p className="text-lg font-bold text-slate-700">{goalSeekResults.paramRanges.lcatMult.max}x</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {goalSeekResults.strategies && goalSeekResults.strategies.length > 0 && (
+                <div className="mt-6 pt-4 border-t border-slate-100">
+                  <p className="text-sm font-medium text-slate-600 mb-3">Strategy Distribution:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {goalSeekResults.strategies.map((strat, idx) => (
+                      <div key={idx} className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-xs font-medium">
+                        {strat.name}: {strat.count} solution{strat.count !== 1 ? 's' : ''}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+          )}
+
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="font-semibold text-lg">Solutions Found</h3>
+                <p className="text-sm text-slate-500">
+                  Found {goalSeekResults.solutions.length} viable scenarios
+                  (tested {goalSeekResults.stats.tested.toLocaleString()} combinations)
+                </p>
+              </div>
+              {goalSeekResults.solutions.length === 0 && (
+                <Badge color="orange">No Solutions</Badge>
+              )}
+              {goalSeekResults.solutions.length > 0 && (
+                <Badge color="green">{goalSeekResults.solutions.length} Valid</Badge>
+              )}
+            </div>
+
+          {goalSeekResults.solutions.length === 0 ? (
+            <div className="text-center py-12">
+              <AlertCircle className="mx-auto text-orange-400 mb-4" size={48} />
+              <h3 className="font-semibold text-slate-700 mb-2">No Solutions Found</h3>
+              <p className="text-slate-500 text-sm max-w-md mx-auto">
+                Try relaxing your constraints (increase max outlay, decrease min profit, or extend break-even date)
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {goalSeekResults.solutions.map((solution, idx) => (
+                <div
+                  key={idx}
+                  className="border border-slate-200 rounded-lg p-4 hover:border-purple-300 hover:shadow-md transition-all"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-purple-100 text-purple-700 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
+                        #{idx + 1}
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-slate-800 flex items-center gap-2">
+                          Solution {idx + 1}
+                          {solution.strategy && (
+                            <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">
+                              {solution.strategy.replace('-', ' ')}
+                            </span>
+                          )}
+                        </h4>
+                        <p className="text-xs text-slate-500">Score: {solution.score.toFixed(2)}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        // Apply this solution to the main app
+                        setDelayDays(solution.parameters.delay);
+                        setFeePercent(solution.parameters.fee);
+                        setEventsPerMonth(solution.parameters.volume);
+
+                        // Apply labor scaling
+                        const newLabor = solution.parameters.scaledLabor;
+                        setLaborCosts(newLabor);
+
+                        setActiveTab('analysis');
+                      }}
+                      className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm transition-colors"
+                    >
+                      <CheckCircle size={16} />
+                      <span>Apply</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div className="bg-blue-50 rounded p-3">
+                      <p className="text-xs text-blue-600 font-medium mb-1">Delay</p>
+                      <p className="text-lg font-bold text-blue-700">{solution.parameters.delay}d</p>
+                    </div>
+                    <div className="bg-green-50 rounded p-3">
+                      <p className="text-xs text-green-600 font-medium mb-1">Fee %</p>
+                      <p className="text-lg font-bold text-green-700">{solution.parameters.fee}%</p>
+                    </div>
+                    <div className="bg-purple-50 rounded p-3">
+                      <p className="text-xs text-purple-600 font-medium mb-1">Volume/Mo</p>
+                      <p className="text-lg font-bold text-purple-700">{solution.parameters.volume}</p>
+                    </div>
+                    <div className="bg-orange-50 rounded p-3">
+                      <p className="text-xs text-orange-600 font-medium mb-1">Labor Scale</p>
+                      <p className="text-lg font-bold text-orange-700">{solution.parameters.laborScale}x</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div className="bg-slate-50 rounded p-3">
+                      <p className="text-xs text-slate-600 font-medium mb-1">Wrap Rate</p>
+                      <p className="text-sm font-bold text-slate-700">{solution.parameters.wrapRate}</p>
+                    </div>
+                    <div className="bg-slate-50 rounded p-3">
+                      <p className="text-xs text-slate-600 font-medium mb-1">LCAT Mult</p>
+                      <p className="text-sm font-bold text-slate-700">{solution.parameters.lcatMult}x</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
+                    <div>
+                      <p className="text-xs text-slate-500">Peak Outlay</p>
+                      <p className="font-bold text-red-600">{formatCompact(solution.results.peakOutlay)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Total Profit</p>
+                      <p className="font-bold text-emerald-600">{formatCompact(solution.results.totalProfit)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Float Duration</p>
+                      <p className="font-bold text-slate-700">{solution.results.floatDuration}d</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Total Events</p>
+                      <p className="font-bold text-slate-700">{solution.results.eventCount.toLocaleString()}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-slate-100">
+                    <p className="text-xs text-slate-500 mb-2">Labor Configuration:</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {solution.parameters.scaledLabor.map((role, ridx) => (
+                        <div key={ridx} className="text-xs bg-slate-50 rounded p-2 flex justify-between">
+                          <span className="font-medium text-slate-700">{role.role}</span>
+                          <span className="text-slate-500">
+                            {role.count}× ${role.rate}/hr × {role.hours}h @ {role.wrapRate} wrap
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans text-slate-800">
       <div className="w-full mx-auto space-y-6">
@@ -857,11 +1652,13 @@ export default function CashFlowApp() {
           <button onClick={() => setActiveTab('analysis')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'analysis' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>Cash Flow Analysis</button>
           <button onClick={() => setActiveTab('builder')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'builder' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>Event Cost Builder</button>
           <button onClick={() => setActiveTab('labor')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'labor' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>Labor & Staffing</button>
+          <button onClick={() => setActiveTab('goalseek')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'goalseek' ? 'border-purple-600 text-purple-600' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>Goal Seek</button>
           <button onClick={() => setActiveTab('docs')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'docs' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>Documentation</button>
         </div>
         {activeTab === 'analysis' && <AnalysisView />}
         {activeTab === 'builder' && <CostBuilderView />}
         {activeTab === 'labor' && (<LaborBuilderView laborCosts={laborCosts} updateLaborRole={updateLaborRole} removeLaborRole={removeLaborRole} addLaborRole={addLaborRole} handleApplyCostToSim={handleApplyCostToSim} totalLaborCost={totalLaborCost} builderProfile={builderProfile} />)}
+        {activeTab === 'goalseek' && <GoalSeekView />}
         {activeTab === 'docs' && <DocsView />}
       </div>
     </div>
