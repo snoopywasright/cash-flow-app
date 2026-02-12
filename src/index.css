@@ -40,7 +40,6 @@ button {
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
   cursor: pointer;
   transition: border-color 0.25s;
 }
@@ -54,18 +53,18 @@ button:focus-visible {
 
 @import "tailwindcss";
 
-/* Custom scrollbar to match the app's dark theme */
+/* Custom scrollbar to match the app's light theme */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #121212; 
+  background: #f1f5f9;
 }
 ::-webkit-scrollbar-thumb {
-  background: #333; 
+  background: #cbd5e1;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #444; 
+  background: #94a3b8;
 }
