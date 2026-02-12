@@ -848,16 +848,16 @@ export default function CashFlowApp() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans text-slate-800">
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="w-full mx-auto space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div><h1 className="text-3xl font-bold text-slate-900">Event Cash Flow Analyzer</h1><p className="text-slate-500 mt-1">Visualize capital outlay peaks across reimbursement scenarios</p></div>
           <div className="flex items-center gap-2"><div className="relative group"><input type="file" accept=".csv" onChange={handleFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" /><button className="flex items-center gap-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg transition-colors shadow-sm"><Upload size={18} /><span>{isProcessing ? "Processing..." : "Upload CSV Data"}</span></button></div>{fileName && (<Badge color="blue">{fileName}</Badge>)}</div>
         </div>
         <div className="flex gap-4 border-b border-slate-200">
-          <button onClick={() => setActiveTab('analysis')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'analysis' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Cash Flow Analysis</button>
-          <button onClick={() => setActiveTab('builder')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'builder' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Event Cost Builder</button>
-          <button onClick={() => setActiveTab('labor')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'labor' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Labor & Staffing</button>
-          <button onClick={() => setActiveTab('docs')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'docs' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Documentation</button>
+          <button onClick={() => setActiveTab('analysis')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'analysis' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-white hover:text-slate-300'}`}>Cash Flow Analysis</button>
+          <button onClick={() => setActiveTab('builder')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'builder' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-white hover:text-slate-300'}`}>Event Cost Builder</button>
+          <button onClick={() => setActiveTab('labor')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'labor' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-white hover:text-slate-300'}`}>Labor & Staffing</button>
+          <button onClick={() => setActiveTab('docs')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'docs' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-white hover:text-slate-300'}`}>Documentation</button>
         </div>
         {activeTab === 'analysis' && <AnalysisView />}
         {activeTab === 'builder' && <CostBuilderView />}
