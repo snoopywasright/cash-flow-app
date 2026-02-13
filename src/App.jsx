@@ -8,9 +8,23 @@ const LOCATIONS = ["California", "Texas", "Florida", "New York", "Illinois", "Oh
 
 // Define coherent defaults so initial state is mathematically valid
 const DEFAULT_BREAKDOWN = {
-  Food: 1000, Lodging: 1200, Childcare: 300, Curriculum: 400, 
+  Food: 1000, Lodging: 1200, Childcare: 300, Curriculum: 400,
   Meeting_Space: 500, AV: 200, Transportation: 100, Other: 50
 };
+
+// Default labor roles from STARS III LCAT Mapping
+const DEFAULT_LABOR_ROLES = [
+  { id: 1, role: 'Program Manager', rate: 97.50, wrapRate: 1.4 },
+  { id: 2, role: 'Financial Manager', rate: 85.00, wrapRate: 1.4 },
+  { id: 3, role: 'Financial Analyst', rate: 70.00, wrapRate: 1.4 },
+  { id: 4, role: 'Event Manager', rate: 87.50, wrapRate: 1.4 },
+  { id: 5, role: 'Event Planner', rate: 65.00, wrapRate: 1.4 },
+  { id: 6, role: 'JR Logistics Assistant', rate: 47.50, wrapRate: 1.4 },
+  { id: 7, role: 'Quality Assurance Specialist', rate: 57.50, wrapRate: 1.4 },
+  { id: 8, role: 'Site Specialist', rate: 62.50, wrapRate: 1.4 },
+  { id: 9, role: 'Curriculum Specialist', rate: 57.50, wrapRate: 1.4 },
+  { id: 10, role: 'Child Care Specialist', rate: 47.50, wrapRate: 1.4 }
+];
 
 const formatCurrency = (val) => {
   if (val === undefined || val === null || isNaN(val)) return "$0";
@@ -62,7 +76,7 @@ const DocsView = () => (
         <h1 className="text-3xl font-bold text-slate-900">Event Cash Flow Analyzer</h1>
       </div>
       <p className="text-slate-600 text-lg leading-relaxed max-w-3xl">
-        A React-based financial simulation tool designed to model cash flow, capital outlay, and profitability for large-scale event management projects.
+        A React-based financial simulation tool designed to model cash flow, capital outlay, and profitability for large-scale event management projects. Features realistic labor rates from STARS III LCAT mapping and configurable profit margins on both ODC and labor costs.
       </p>
     </div>
 
@@ -73,7 +87,7 @@ const DocsView = () => (
         Overview
       </h2>
       <p className="text-slate-600 leading-relaxed mb-4">
-        This application simulates the financial lifecycle of ~22,000 events over a 5-year period (2026–2031). It helps project managers visualize two critical metrics:
+        This application simulates the financial lifecycle of thousands of events from 2026–2030, with reimbursement payments continuing into 2031. It helps project managers visualize critical financial metrics and understand the capital requirements for scaling event operations:
       </p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="p-4 bg-red-50 rounded-lg border border-red-100">
@@ -112,10 +126,10 @@ const DocsView = () => (
         <div>
           <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">3. Cash Inflow (Reimbursement)</h3>
           <code className="block bg-white p-3 rounded border border-slate-200 text-slate-700 font-mono text-sm">
-            Inflow = (Labor Cost + ODC Cost) + (ODC Cost × Fee %)
+            Inflow = (Labor Cost + ODC Cost) + (ODC Cost × Fee %) + (Labor Cost × Labor Profit %)
           </code>
           <p className="text-xs text-slate-500 mt-1 ml-1">
-            * Note: Labor is treated as a pass-through (reimbursed at cost). The Service Fee is applied <strong>only</strong> to the ODC portion.
+            * The Service Fee is applied to the ODC portion, and a separate Labor Profit percentage is applied to the Labor Cost.
           </p>
         </div>
 
@@ -131,19 +145,126 @@ const DocsView = () => (
       </div>
     </section>
 
-    {/* Key Features */}
+    {/* Labor Model */}
+    <section>
+      <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+        <Briefcase size={20} className="text-indigo-500" />
+        Labor & Staffing Model
+      </h2>
+      <p className="text-slate-600 leading-relaxed mb-4">
+        The app includes 10 labor categories from the STARS III LCAT mapping with market-based hourly rates. Each event type (Basic, Standard, Specialized) has a unique staffing configuration:
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+          <h3 className="font-semibold text-blue-700 mb-2">Basic Events</h3>
+          <ul className="text-sm text-blue-600 space-y-1">
+            <li>• Event Planner: 2 hrs</li>
+            <li>• Event Manager: 0.25 hrs</li>
+            <li>• Financial Analyst: 0.25 hrs</li>
+          </ul>
+        </div>
+        <div className="p-4 bg-purple-50 rounded-lg border border-purple-100">
+          <h3 className="font-semibold text-purple-700 mb-2">Standard Events</h3>
+          <ul className="text-sm text-purple-600 space-y-1">
+            <li>• Event Planner: 2 hrs</li>
+            <li>• Event Manager: 0.25 hrs</li>
+            <li>• Site Specialist: 1 hr</li>
+            <li>• Child Care Specialist: 1 hr</li>
+            <li>• Curriculum Specialist: 1 hr</li>
+          </ul>
+        </div>
+        <div className="p-4 bg-orange-50 rounded-lg border border-orange-100">
+          <h3 className="font-semibold text-orange-700 mb-2">Specialized Events</h3>
+          <ul className="text-sm text-orange-600 space-y-1">
+            <li>• Program Manager: 20 hrs</li>
+            <li>• Event Manager: 24 hrs</li>
+            <li>• Event Planner: 32 hrs</li>
+            <li>• + 3 additional specialists</li>
+          </ul>
+        </div>
+      </div>
+      <p className="text-xs text-slate-500 italic">
+        All labor costs include a 1.4× wrap rate (40% G&A) and can be customized in the Labor & Staffing tab.
+      </p>
+    </section>
+
+    {/* Default Configuration */}
     <section>
       <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
         <Settings size={20} className="text-indigo-500" />
+        Default Configuration
+      </h2>
+      <p className="text-slate-600 leading-relaxed mb-4">
+        The application opens with realistic default parameters designed to model a typical large-scale event management operation:
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-4">
+          <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <h3 className="font-semibold text-slate-800 mb-2">Financial Parameters</h3>
+            <ul className="text-sm text-slate-600 space-y-1">
+              <li>• <strong>Avg. Reimbursement Delay:</strong> 90 days</li>
+              <li>• <strong>Service Fee (on ODC):</strong> 2.0%</li>
+              <li>• <strong>Profit on Labor:</strong> 15.0%</li>
+              <li>• <strong>Cost Variance (Std Dev):</strong> 15%</li>
+            </ul>
+          </div>
+          <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <h3 className="font-semibold text-slate-800 mb-2">Event Volume & Mix</h3>
+            <ul className="text-sm text-slate-600 space-y-1">
+              <li>• <strong>Total Volume:</strong> 300 events/month</li>
+              <li>• <strong>Basic Events:</strong> 50% of mix</li>
+              <li>• <strong>Standard Events:</strong> 40% of mix</li>
+              <li>• <strong>Specialized Events:</strong> 10% of mix</li>
+            </ul>
+          </div>
+        </div>
+        <div className="space-y-4">
+          <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+            <h3 className="font-semibold text-blue-800 mb-2">Basic Event Defaults</h3>
+            <ul className="text-sm text-blue-700 space-y-1">
+              <li>• <strong>ODC Cost:</strong> ~$3,750</li>
+              <li>• <strong>Labor Cost:</strong> ~$206</li>
+              <li>• <strong>Total:</strong> ~$3,956/event</li>
+            </ul>
+          </div>
+          <div className="p-4 bg-purple-50 rounded-lg border border-purple-100">
+            <h3 className="font-semibold text-purple-800 mb-2">Standard Event Defaults</h3>
+            <ul className="text-sm text-purple-700 space-y-1">
+              <li>• <strong>ODC Cost:</strong> $25,000</li>
+              <li>• <strong>Labor Cost:</strong> ~$414</li>
+              <li>• <strong>Total:</strong> ~$25,414/event</li>
+            </ul>
+          </div>
+          <div className="p-4 bg-orange-50 rounded-lg border border-orange-100">
+            <h3 className="font-semibold text-orange-800 mb-2">Specialized Event Defaults</h3>
+            <ul className="text-sm text-orange-700 space-y-1">
+              <li>• <strong>ODC Cost:</strong> $190,000</li>
+              <li>• <strong>Labor Cost:</strong> ~$10,752</li>
+              <li>• <strong>Total:</strong> ~$200,752/event</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 p-4 bg-indigo-50 rounded-lg border border-indigo-100">
+        <p className="text-sm text-indigo-800">
+          <strong>Simulation Scope:</strong> 18,000 events over 5 years (2026–2030), generating ~$240M in total project costs and tracking cash flow through 2031 as final reimbursements arrive.
+        </p>
+      </div>
+    </section>
+
+    {/* Key Features */}
+    <section>
+      <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+        <Activity size={20} className="text-indigo-500" />
         Key Features & Usage
       </h2>
       <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {[
-          { title: "Interactive Simulation", desc: "Adjust delays (30–150 days) and fees (2–5%) to see real-time impacts." },
-          { title: "Granular Cost Builder", desc: "Define specific 'Other Direct Costs' (ODC) per event type (Food, Lodging, etc.)." },
-          { title: "Labor & Staffing", desc: "Define roles, rates, and apply 'Wrap Rates' for overhead/benefits." },
-          { title: "Gaussian Data Generation", desc: "Realistic bell-curve variance for event costs and payment delays." },
-          { title: "CSV Export", desc: "Download full dataset (~22k rows) with granular breakdowns for Excel/Tableau." }
+          { title: "Interactive Simulation", desc: "Adjust reimbursement delays (30–150 days), ODC fees (2–5%), and labor profit (8–25%) to see real-time financial impacts." },
+          { title: "Three Event Types", desc: "Model Basic, Standard, and Specialized events with distinct ODC and labor configurations." },
+          { title: "STARS III LCAT Rates", desc: "Pre-loaded with 10 labor categories at market rates with 40% G&A wrap. Customize hours per event type." },
+          { title: "Dual Profit Streams", desc: "Separate profit margins for ODC (service fees) and Labor (markup) to model realistic contract structures." },
+          { title: "Advanced Analytics", desc: "Track peak cash outlay, break-even timing, float recovery, and total profitability across multi-year simulations." }
         ].map((feature, i) => (
           <li key={i} className="flex gap-3">
             <div className="h-6 w-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-xs font-bold flex-shrink-0">
@@ -160,21 +281,24 @@ const DocsView = () => (
   </div>
 );
 
-const LaborBuilderView = ({ 
-  laborCosts, 
-  updateLaborRole, 
-  removeLaborRole, 
-  addLaborRole, 
-  handleApplyCostToSim, 
-  totalLaborCost, 
-  builderProfile 
+const LaborBuilderView = ({
+  laborCosts,
+  updateLaborRole,
+  removeLaborRole,
+  addLaborRole,
+  handleApplyCostToSim,
+  totalLaborCost,
+  builderProfile,
+  switchProfile
 }) => {
-  if (!laborCosts) return null;
+  if (!laborCosts || !laborCosts[builderProfile]) return null;
+
+  const currentLaborConfig = laborCosts[builderProfile];
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <Card className="p-6">
-        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 pb-4 border-b border-slate-100 gap-4">
             <div className="flex items-center gap-2">
               <Briefcase className="text-red-600" size={20} />
               <div>
@@ -182,9 +306,16 @@ const LaborBuilderView = ({
                 <p className="text-xs text-slate-500">Define roles charged to the event budget</p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-xs text-slate-500 uppercase tracking-wide">Total Labor Per Event</p>
-              <p className="text-2xl font-bold text-slate-800">{formatCurrency(totalLaborCost)}</p>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 bg-slate-50 p-1 rounded-lg border border-slate-200">
+                {['Basic', 'Standard', 'Specialized'].map(type => (
+                  <button key={type} onClick={() => switchProfile(type)} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${builderProfile === type ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{type}</button>
+                ))}
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-slate-500 uppercase tracking-wide">Total Labor Per Event</p>
+                <p className="text-2xl font-bold text-slate-800">{formatCurrency(totalLaborCost)}</p>
+              </div>
             </div>
         </div>
 
@@ -202,7 +333,7 @@ const LaborBuilderView = ({
               </tr>
             </thead>
             <tbody className="text-sm">
-              {laborCosts.map((item) => {
+              {currentLaborConfig.map((item) => {
                 const rate = parseFloat(item.rate) || 0;
                 const hours = parseFloat(item.hours) || 0;
                 const count = parseFloat(item.count) || 0;
@@ -307,46 +438,84 @@ const LaborBuilderView = ({
 // --- Main Application ---
 
 export default function CashFlowApp() {
-  const [activeTab, setActiveTab] = useState('analysis'); 
+  const [activeTab, setActiveTab] = useState('analysis');
   const [rawData, setRawData] = useState(null);
-  const [delayDays, setDelayDays] = useState(30);
+  const [delayDays, setDelayDays] = useState(90);
   const [feePercent, setFeePercent] = useState(2.0);
+  const [laborProfitPercent, setLaborProfitPercent] = useState(15.0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [fileName, setFileName] = useState("");
-  
+
   // Simulation controls
   const [eventsPerMonth, setEventsPerMonth] = useState(300);
   const [stdDevPercent, setStdDevPercent] = useState(15); 
 
   // Initial Calculation Helpers
   const calcSum = (obj) => Object.values(obj).reduce((a, b) => a + b, 0);
+  const calcLaborCost = (roles) => {
+    return roles.reduce((acc, item) => {
+      const h = parseFloat(item.hours) || 0;
+      const w = parseFloat(item.wrapRate) || 1.0;
+      const count = parseFloat(item.count) || 0;
+      const rate = parseFloat(item.rate) || 0;
+      return acc + (count * rate * h * w);
+    }, 0);
+  };
+
   const initialOdc = calcSum(DEFAULT_BREAKDOWN);
-  const initialLabor = 300; 
-  const initialTotal = initialOdc + initialLabor;
+
+  // Calculate initial labor from default configs (will be set properly after laborCosts state initializes)
+  const initialBasicLabor = calcLaborCost(DEFAULT_LABOR_ROLES.map(role => ({
+    ...role,
+    count: ['Event Planner', 'Event Manager', 'Financial Analyst'].includes(role.role) ? 1 : 0,
+    hours: role.role === 'Event Planner' ? 2 :
+           role.role === 'Event Manager' ? 0.25 :
+           role.role === 'Financial Analyst' ? 0.25 : 0
+  })));
+
+  const initialStandardLabor = calcLaborCost(DEFAULT_LABOR_ROLES.map(role => ({
+    ...role,
+    count: ['Event Manager', 'Event Planner', 'Child Care Specialist', 'Curriculum Specialist', 'Site Specialist'].includes(role.role) ? 1 : 0,
+    hours: role.role === 'Event Planner' ? 2 :
+           role.role === 'Event Manager' ? 0.25 :
+           role.role === 'Child Care Specialist' ? 1 :
+           role.role === 'Curriculum Specialist' ? 1 :
+           role.role === 'Site Specialist' ? 1 : 0
+  })));
+
+  const initialSpecializedLabor = calcLaborCost(DEFAULT_LABOR_ROLES.map(role => ({
+    ...role,
+    count: ['Program Manager', 'Event Manager', 'Event Planner', 'Financial Analyst', 'Site Specialist', 'Curriculum Specialist'].includes(role.role) ? 1 : 0,
+    hours: role.role === 'Program Manager' ? 20 :
+           role.role === 'Event Manager' ? 24 :
+           role.role === 'Event Planner' ? 32 :
+           role.role === 'Financial Analyst' ? 16 :
+           ['Site Specialist', 'Curriculum Specialist'].includes(role.role) ? 12 : 0
+  })));
 
   // Event Mix State
   // Initialize with consistent sums to prevent simulation drift
   const [eventMix, setEventMix] = useState({
-    Basic: { 
-        pct: 50, 
-        cost: initialTotal, 
+    Basic: {
+        pct: 50,
+        cost: initialOdc + initialBasicLabor,
         color: '#3b82f6',
-        breakdown: { ...DEFAULT_BREAKDOWN }, 
-        labor: initialLabor 
+        breakdown: { ...DEFAULT_BREAKDOWN },
+        labor: initialBasicLabor
     },
-    Standard: { 
-        pct: 40, 
-        cost: initialTotal * 3, // Approximation for differentiation
+    Standard: {
+        pct: 40,
+        cost: 25000,
         color: '#8b5cf6',
-        breakdown: { ...DEFAULT_BREAKDOWN, Food: 3000, Lodging: 4000, Meeting_Space: 2000 },
-        labor: 800 
+        breakdown: { Food: 8000, Lodging: 10000, Childcare: 1000, Curriculum: 2000, Meeting_Space: 2000, AV: 1000, Transportation: 500, Other: 500 },
+        labor: initialStandardLabor
     },
-    Specialized: { 
-        pct: 10, 
-        cost: initialTotal * 8, 
+    Specialized: {
+        pct: 10,
+        cost: 200000,
         color: '#f59e0b',
-        breakdown: { ...DEFAULT_BREAKDOWN, Food: 8000, Lodging: 10000, AV: 5000 },
-        labor: 2000
+        breakdown: { Food: 50000, Lodging: 60000, Childcare: 10000, Curriculum: 20000, Meeting_Space: 25000, AV: 15000, Transportation: 5000, Other: 5000 },
+        labor: initialSpecializedLabor
     }
   });
 
@@ -354,27 +523,51 @@ export default function CashFlowApp() {
   const [builderProfile, setBuilderProfile] = useState('Standard');
   const [costBreakdown, setCostBreakdown] = useState({ ...DEFAULT_BREAKDOWN });
 
-  // Labor Builder State
-  const [laborCosts, setLaborCosts] = useState([
-    { id: 1, role: 'Event Planner', count: 1, rate: 45, hours: 15, wrapRate: 1.0 },
-    { id: 2, role: 'On-site Coord', count: 1, rate: 35, hours: 10, wrapRate: 1.0 }
-  ]);
+  // Labor Builder State - separate configs for each event type
+  const [laborCosts, setLaborCosts] = useState({
+    Basic: DEFAULT_LABOR_ROLES.map(role => ({
+      ...role,
+      count: ['Event Planner', 'Event Manager', 'Financial Analyst'].includes(role.role) ? 1 : 0,
+      hours: role.role === 'Event Planner' ? 2 :
+             role.role === 'Event Manager' ? 0.25 :
+             role.role === 'Financial Analyst' ? 0.25 : 0
+    })),
+    Standard: DEFAULT_LABOR_ROLES.map(role => ({
+      ...role,
+      count: ['Event Manager', 'Event Planner', 'Child Care Specialist', 'Curriculum Specialist', 'Site Specialist'].includes(role.role) ? 1 : 0,
+      hours: role.role === 'Event Planner' ? 2 :
+             role.role === 'Event Manager' ? 0.25 :
+             role.role === 'Child Care Specialist' ? 1 :
+             role.role === 'Curriculum Specialist' ? 1 :
+             role.role === 'Site Specialist' ? 1 : 0
+    })),
+    Specialized: DEFAULT_LABOR_ROLES.map(role => ({
+      ...role,
+      count: ['Program Manager', 'Event Manager', 'Event Planner', 'Financial Analyst', 'Site Specialist', 'Curriculum Specialist'].includes(role.role) ? 1 : 0,
+      hours: role.role === 'Program Manager' ? 20 :
+             role.role === 'Event Manager' ? 24 :
+             role.role === 'Event Planner' ? 32 :
+             role.role === 'Financial Analyst' ? 16 :
+             ['Site Specialist', 'Curriculum Specialist'].includes(role.role) ? 12 : 0
+    }))
+  });
 
   const costColors = {
     Food: '#3b82f6', Lodging: '#8b5cf6', Childcare: '#ec4899', Curriculum: '#10b981', 
     Meeting_Space: '#f59e0b', AV: '#6366f1', Transportation: '#06b6d4', Other: '#94a3b8', Labor: '#ef4444' 
   };
 
-  // Safe Calculation for Total Labor
+  // Safe Calculation for Total Labor - now based on current builderProfile
   const totalLaborCost = useMemo(() => {
-    return laborCosts.reduce((acc, item) => {
+    const currentLaborConfig = laborCosts[builderProfile] || [];
+    return currentLaborConfig.reduce((acc, item) => {
         const h = parseFloat(item.hours) || 0;
         const w = parseFloat(item.wrapRate) || 1.0;
         const count = parseFloat(item.count) || 0;
         const rate = parseFloat(item.rate) || 0;
         return acc + (count * rate * h * w);
     }, 0);
-  }, [laborCosts]);
+  }, [laborCosts, builderProfile]);
 
   const totalODCCost = Object.values(costBreakdown).reduce((a, b) => a + (parseFloat(b) || 0), 0);
   const grandTotalCost = totalODCCost + totalLaborCost;
@@ -391,7 +584,7 @@ export default function CashFlowApp() {
     try {
       const sampleEvents = [];
       const startYear = 2026;
-      const endYear = 2031;
+      const endYear = 2030; // Last event year (2031 is for payments only)
       const safeEventsPerMonth = Math.max(1, parseInt(eventsPerMonth) || 1);
       const eventsPerYear = safeEventsPerMonth * 12; 
       
@@ -547,9 +740,10 @@ export default function CashFlowApp() {
       const { startYear, events } = rawData;
       const lastEvent = events[events.length - 1];
       if (!lastEvent) return null;
-      
+
       const lastEventDay = Math.max(0, lastEvent.d);
-      const maxDay = lastEventDay + 400; 
+      // Extend timeline to accommodate payments after last event (e.g., 150 days max delay + buffer)
+      const maxDay = lastEventDay + 200;
       if (maxDay > 100000) return null;
 
       const dailyNetChange = new Float32Array(maxDay + 1);
@@ -571,13 +765,15 @@ export default function CashFlowApp() {
         
         // Outflow: We pay full cost
         if (event.d >= 0 && event.d <= maxDay) dailyNetChange[event.d] -= cost;
-        
-        // Inflow: (Labor + ODC) + (ODC * Fee%)
-        // We get back exactly what we paid (Labor + ODC) PLUS profit on ODC
-        const profit = odc * (feePercent / 100);
-        totalProjectProfit += profit;
-        
-        const inflow = (labor + odc) + profit;
+
+        // Inflow: (Labor + ODC) + (ODC * Fee%) + (Labor * Labor Profit %)
+        // We get back exactly what we paid (Labor + ODC) PLUS profit on ODC AND profit on Labor
+        const odcProfit = odc * (feePercent / 100);
+        const laborProfit = labor * (laborProfitPercent / 100);
+        const totalProfit = odcProfit + laborProfit;
+        totalProjectProfit += totalProfit;
+
+        const inflow = (labor + odc) + totalProfit;
 
         // Gaussian Delay
         const delayZ = event.delayZ || 0;
@@ -638,7 +834,7 @@ export default function CashFlowApp() {
       console.error("Simulation error", e);
       return null;
     }
-  }, [rawData, delayDays, feePercent]);
+  }, [rawData, delayDays, feePercent, laborProfitPercent]);
 
   const handleApplyCostToSim = () => {
     setEventMix(prev => ({
@@ -657,7 +853,10 @@ export default function CashFlowApp() {
   const switchProfile = (newProfile) => {
     setBuilderProfile(newProfile);
     const saved = eventMix[newProfile];
-    if (saved && saved.breakdown) setCostBreakdown(saved.breakdown);
+    if (saved && saved.breakdown) {
+      setCostBreakdown(saved.breakdown);
+    }
+    // Labor config is already per-profile in the state
   };
 
   const updateCostCategory = (category, value) => {
@@ -693,16 +892,26 @@ export default function CashFlowApp() {
   };
 
   const addLaborRole = () => {
-    const newId = Math.max(...laborCosts.map(i => i.id), 0) + 1;
-    setLaborCosts([...laborCosts, { id: newId, role: 'New Role', count: 1, rate: 25, hours: 5, wrapRate: 1.0 }]);
+    const currentConfig = laborCosts[builderProfile] || [];
+    const newId = Math.max(...currentConfig.map(i => i.id), 0) + 1;
+    setLaborCosts({
+      ...laborCosts,
+      [builderProfile]: [...currentConfig, { id: newId, role: 'New Role', count: 1, rate: 25, hours: 5, wrapRate: 1.4 }]
+    });
   };
 
   const updateLaborRole = (id, field, value) => {
-    setLaborCosts(laborCosts.map(item => item.id === id ? { ...item, [field]: value } : item));
+    setLaborCosts({
+      ...laborCosts,
+      [builderProfile]: laborCosts[builderProfile].map(item => item.id === id ? { ...item, [field]: value } : item)
+    });
   };
 
   const removeLaborRole = (id) => {
-    setLaborCosts(laborCosts.filter(item => item.id !== id));
+    setLaborCosts({
+      ...laborCosts,
+      [builderProfile]: laborCosts[builderProfile].filter(item => item.id !== id)
+    });
   };
 
   // Views
@@ -724,6 +933,11 @@ export default function CashFlowApp() {
             <div className="flex justify-between"><label className="text-sm font-medium text-slate-600">Service Fee (on ODC)</label><span className="font-bold text-emerald-600">{feePercent}%</span></div>
             <input type="range" min="2" max="5" step="0.5" value={feePercent} onChange={(e) => setFeePercent(parseFloat(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
           </div>
+          <div className="space-y-3">
+            <div className="flex justify-between"><label className="text-sm font-medium text-slate-600">Profit on Labor</label><span className="font-bold text-blue-600">{laborProfitPercent}%</span></div>
+            <input type="range" min="8" max="25" step="0.5" value={laborProfitPercent} onChange={(e) => setLaborProfitPercent(parseFloat(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+            <div className="flex justify-between text-xs text-slate-400"><span>8%</span><span>25%</span></div>
+          </div>
           <div className="pt-4 border-t border-slate-100">
              <div className="flex items-center gap-2 mb-4"><Layers className="text-purple-600" size={20} /><h3 className="font-semibold text-lg">Event Mix & Costs</h3></div>
              <div className="space-y-3 mb-4 p-3 bg-slate-50 rounded-lg">
@@ -739,7 +953,7 @@ export default function CashFlowApp() {
                   <div key={type} className="space-y-2 relative pl-3 border-l-2" style={{ borderColor: eventMix[type].color }}>
                     <div className="flex justify-between items-center"><span className="text-sm font-bold text-slate-700">{type}</span><span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-500">{eventMix[type].pct}%</span></div>
                     <div className="flex items-center gap-2"><span className="text-xs text-slate-400 w-8">Vol</span><input type="range" min="0" max="100" step="1" disabled={fileName !== "Generated Sample Data"} value={eventMix[type].pct} onChange={(e) => updateMix(type, 'pct', e.target.value)} className="flex-grow h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer" style={{ accentColor: eventMix[type].color }} /></div>
-                    <div className="flex items-center gap-2"><span className="text-xs text-slate-400 w-8">Avg $</span><input type="range" min="1000" max={type === 'Specialized' ? 100000 : 25000} step={500} disabled={fileName !== "Generated Sample Data"} value={eventMix[type].cost} onChange={(e) => updateMix(type, 'cost', e.target.value)} className="flex-grow h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer" style={{ accentColor: eventMix[type].color }} /><span className="text-xs font-mono font-medium text-slate-600 w-12 text-right">{formatCompact(eventMix[type].cost)}</span></div>
+                    <div className="flex items-center gap-2"><span className="text-xs text-slate-400 w-8">Avg $</span><input type="range" min="1000" max={type === 'Specialized' ? 400000 : 25000} step={500} disabled={fileName !== "Generated Sample Data"} value={eventMix[type].cost} onChange={(e) => updateMix(type, 'cost', e.target.value)} className="flex-grow h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer" style={{ accentColor: eventMix[type].color }} /><span className="text-xs font-mono font-medium text-slate-600 w-12 text-right">{formatCompact(eventMix[type].cost)}</span></div>
                   </div>
                 ))}
              </div>
@@ -785,7 +999,7 @@ export default function CashFlowApp() {
               </Card>
               <Card className="p-6 bg-emerald-50 border-emerald-100">
                 <div className="flex items-start justify-between"><div><p className="text-sm font-medium text-emerald-600 mb-1">Total Net Profit</p><h2 className="text-2xl font-bold text-emerald-700">{formatCompact(simulationResults.totalProfit)}</h2></div><div className="p-3 bg-white rounded-full shadow-sm text-emerald-500"><DollarSign size={24} /></div></div>
-                <p className="text-xs text-emerald-600 mt-2">Total fees earned ({feePercent}%)</p>
+                <p className="text-xs text-emerald-600 mt-2">ODC fees ({feePercent}%) + Labor profit ({laborProfitPercent}%)</p>
               </Card>
             </div>
             <Card className="p-6 bg-slate-50 border border-slate-200">
@@ -861,7 +1075,7 @@ export default function CashFlowApp() {
         </div>
         {activeTab === 'analysis' && <AnalysisView />}
         {activeTab === 'builder' && <CostBuilderView />}
-        {activeTab === 'labor' && (<LaborBuilderView laborCosts={laborCosts} updateLaborRole={updateLaborRole} removeLaborRole={removeLaborRole} addLaborRole={addLaborRole} handleApplyCostToSim={handleApplyCostToSim} totalLaborCost={totalLaborCost} builderProfile={builderProfile} />)}
+        {activeTab === 'labor' && (<LaborBuilderView laborCosts={laborCosts} updateLaborRole={updateLaborRole} removeLaborRole={removeLaborRole} addLaborRole={addLaborRole} handleApplyCostToSim={handleApplyCostToSim} totalLaborCost={totalLaborCost} builderProfile={builderProfile} switchProfile={switchProfile} />)}
         {activeTab === 'docs' && <DocsView />}
       </div>
     </div>
