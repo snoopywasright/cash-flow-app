@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, AreaChart, PieChart, Pie, Cell, Legend } from 'recharts';
-import { Upload, AlertCircle, TrendingDown, TrendingUp, DollarSign, Calendar, FileText, Layers, PieChart as PieIcon, ArrowRight, CheckCircle, Settings, Users, Activity, Plus, Trash2, Briefcase, Download, Info, BookOpen } from 'lucide-react';
+import { Upload, AlertCircle, TrendingDown, TrendingUp, DollarSign, Calendar, FileText, Layers, PieChart as PieIcon, ArrowRight, CheckCircle, Settings, Users, Activity, Plus, Trash2, Briefcase, Download, Info, BookOpen, Globe, BarChart2 } from 'lucide-react';
 
 // --- Static Data & Helpers ---
 
@@ -25,6 +25,33 @@ const DEFAULT_LABOR_ROLES = [
   { id: 9, role: 'Curriculum Specialist', rate: 57.50, wrapRate: 1.4 },
   { id: 10, role: 'Child Care Specialist', rate: 47.50, wrapRate: 1.4 }
 ];
+
+// FFP Pricing constants
+const DURATION_TIERS = ['Half-day', '1-day', '2-day', '3+ days'];
+const ATTENDEE_TIERS = ['Small', 'Medium', 'Large', 'XL'];
+const ATTENDEE_TIER_LABELS = { Small: '1–50', Medium: '51–150', Large: '151–500', XL: '500+' };
+
+const DEFAULT_FFP_MATRIX = {
+  CONUS: {
+    'Half-day': { Small: 5000,  Medium: 15000, Large: 40000,  XL: 100000 },
+    '1-day':    { Small: 8000,  Medium: 25000, Large: 65000,  XL: 160000 },
+    '2-day':    { Small: 12000, Medium: 38000, Large: 95000,  XL: 240000 },
+    '3+ days':  { Small: 18000, Medium: 55000, Large: 140000, XL: 350000 },
+  },
+  OCONUS: {
+    'Half-day': { Small: 8000,  Medium: 22000, Large: 60000,  XL: 150000 },
+    '1-day':    { Small: 12000, Medium: 38000, Large: 100000, XL: 240000 },
+    '2-day':    { Small: 18000, Medium: 58000, Large: 145000, XL: 360000 },
+    '3+ days':  { Small: 27000, Medium: 85000, Large: 210000, XL: 525000 },
+  },
+};
+
+const getAttendeeTier = (attendees) => {
+  if (attendees <= 50) return 'Small';
+  if (attendees <= 150) return 'Medium';
+  if (attendees <= 500) return 'Large';
+  return 'XL';
+};
 
 const formatCurrency = (val) => {
   if (val === undefined || val === null || isNaN(val)) return "$0";
@@ -124,12 +151,12 @@ const DocsView = () => (
         </div>
 
         <div>
-          <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">3. Cash Inflow (Reimbursement)</h3>
+          <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">3. Cash Inflow (FFP Payment)</h3>
           <code className="block bg-white p-3 rounded border border-slate-200 text-slate-700 font-mono text-sm">
-            Inflow = (Labor Cost + ODC Cost) + (ODC Cost × Fee %) + (Labor Cost × Labor Profit %)
+            Inflow = FFP Price (from pricing matrix)
           </code>
           <p className="text-xs text-slate-500 mt-1 ml-1">
-            * The Service Fee is applied to the ODC portion, and a separate Labor Profit percentage is applied to the Labor Cost.
+            * FFP price is looked up from the matrix using the event's attendee tier, location zone (CONUS/OCONUS), and duration. It is escalated annually. Profit = FFP Price − Actual Cost.
           </p>
         </div>
 
@@ -203,8 +230,8 @@ const DocsView = () => (
             <h3 className="font-semibold text-slate-800 mb-2">Financial Parameters</h3>
             <ul className="text-sm text-slate-600 space-y-1">
               <li>• <strong>Avg. Reimbursement Delay:</strong> 90 days</li>
-              <li>• <strong>Service Fee (on ODC):</strong> 2.0%</li>
-              <li>• <strong>Profit on Labor:</strong> 15.0%</li>
+              <li>• <strong>Annual Price Escalation:</strong> 3%</li>
+              <li>• <strong>OCONUS Event Mix:</strong> 5%</li>
               <li>• <strong>Cost Variance (Std Dev):</strong> 15%</li>
             </ul>
           </div>
@@ -260,11 +287,11 @@ const DocsView = () => (
       </h2>
       <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {[
-          { title: "Interactive Simulation", desc: "Adjust reimbursement delays (30–150 days), ODC fees (2–5%), and labor profit (8–25%) to see real-time financial impacts." },
-          { title: "Three Event Types", desc: "Model Basic, Standard, and Specialized events with distinct ODC and labor configurations." },
-          { title: "STARS III LCAT Rates", desc: "Pre-loaded with 10 labor categories at market rates with 40% G&A wrap. Customize hours per event type." },
-          { title: "Dual Profit Streams", desc: "Separate profit margins for ODC (service fees) and Labor (markup) to model realistic contract structures." },
-          { title: "Advanced Analytics", desc: "Track peak cash outlay, break-even timing, float recovery, and total profitability across multi-year simulations." }
+          { title: "FFP Pricing Matrix", desc: "Set fixed prices per event keyed on attendees (4 tiers), location zone (CONUS/OCONUS), and duration (Half-day to 3+ days). Prices escalate annually." },
+          { title: "CONUS / OCONUS Support", desc: "Configure what % of events are international (OCONUS). OCONUS events are priced from a separate matrix at higher rates." },
+          { title: "STARS III LCAT Rates", desc: "Pre-loaded with 10 labor categories at market rates with 40% G&A wrap. Actual T&M costs are tracked internally for margin analysis." },
+          { title: "Gross Margin Analytics", desc: "See total FFP revenue, actual T&M cost, net profit, and gross margin % across the full 5-year simulation." },
+          { title: "Advanced Analytics", desc: "Track peak cash outlay, break-even timing, float recovery time, and escalated pricing reference tables by year." }
         ].map((feature, i) => (
           <li key={i} className="flex gap-3">
             <div className="h-6 w-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-xs font-bold flex-shrink-0">
@@ -435,14 +462,150 @@ const LaborBuilderView = ({
   );
 };
 
+const FFPMatrixView = ({ ffpMatrix, setFfpMatrix, escalationRate, setEscalationRate, oconusPct, setOconusPct, onApply }) => {
+  const startYear = 2026;
+  const years = [2026, 2027, 2028, 2029, 2030];
+
+  const updateCell = (zone, duration, tier, value) => {
+    const numValue = parseInt(value.replace(/[^0-9]/g, '')) || 0;
+    setFfpMatrix(prev => ({
+      ...prev,
+      [zone]: { ...prev[zone], [duration]: { ...prev[zone][duration], [tier]: numValue } }
+    }));
+  };
+
+  const getEscalatedPrice = (basePrice, year) =>
+    Math.round(basePrice * Math.pow(1 + escalationRate / 100, year - startYear));
+
+  return (
+    <div className="space-y-6 max-w-6xl mx-auto">
+      {/* Controls */}
+      <Card className="p-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 pb-4 mb-4 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <BarChart2 className="text-indigo-600" size={20} />
+            <div>
+              <h3 className="font-semibold text-lg">FFP Pricing Matrix</h3>
+              <p className="text-xs text-slate-500">Fixed prices billed to the client per event. Profit = FFP Price − Actual Cost.</p>
+            </div>
+          </div>
+          <button onClick={onApply} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg shadow-md transition-all transform hover:scale-105 whitespace-nowrap">
+            <CheckCircle size={18} />
+            <span>Apply to Simulation</span>
+            <ArrowRight size={16} />
+          </button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <label className="text-sm font-medium text-slate-600">Annual Price Escalation</label>
+              <span className="font-bold text-indigo-600">{escalationRate}%/yr</span>
+            </div>
+            <input type="range" min="0" max="10" step="0.5" value={escalationRate} onChange={(e) => setEscalationRate(parseFloat(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
+            <div className="flex justify-between text-xs text-slate-400"><span>0%</span><span>10%</span></div>
+          </div>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <label className="text-sm font-medium text-slate-600 flex items-center gap-1.5"><Globe size={14} className="text-slate-400" />OCONUS Event Mix</label>
+              <span className="font-bold text-orange-600">{oconusPct}%</span>
+            </div>
+            <input type="range" min="0" max="20" step="1" value={oconusPct} onChange={(e) => setOconusPct(parseInt(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-orange-500" />
+            <div className="flex justify-between text-xs text-slate-400"><span>0% (all CONUS)</span><span>20%</span></div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Editable Price Tables */}
+      {['CONUS', 'OCONUS'].map(zone => (
+        <Card key={zone} className="p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Globe size={16} className={zone === 'OCONUS' ? 'text-orange-500' : 'text-blue-500'} />
+            <h3 className="font-semibold text-slate-800">{zone} Base Prices (2026 $)</h3>
+            <Badge color={zone === 'OCONUS' ? 'orange' : 'blue'}>{zone}</Badge>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  <th className="text-left py-2 pr-4 text-xs text-slate-500 font-medium w-28">Duration</th>
+                  {ATTENDEE_TIERS.map(tier => (
+                    <th key={tier} className="text-center py-2 px-3 text-xs text-slate-500 font-medium">
+                      <div>{tier}</div>
+                      <div className="text-slate-400 font-normal">{ATTENDEE_TIER_LABELS[tier]}</div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {DURATION_TIERS.map(duration => (
+                  <tr key={duration} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+                    <td className="py-3 pr-4 text-xs font-semibold text-slate-600 whitespace-nowrap">{duration}</td>
+                    {ATTENDEE_TIERS.map(tier => (
+                      <td key={tier} className="py-2 px-2 text-center">
+                        <div className="flex items-center justify-center gap-0.5">
+                          <span className="text-slate-400 text-xs">$</span>
+                          <input
+                            type="text"
+                            value={ffpMatrix[zone][duration][tier].toLocaleString()}
+                            onChange={(e) => updateCell(zone, duration, tier, e.target.value)}
+                            className="w-24 text-right border border-slate-200 rounded py-1 px-1 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          />
+                        </div>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ))}
+
+      {/* Escalation Reference Table */}
+      <Card className="p-6">
+        <h3 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
+          <TrendingUp size={16} className="text-emerald-500" />
+          Escalated Prices by Year — CONUS, 1-day Events
+        </h3>
+        <p className="text-xs text-slate-500 mb-4">Illustrates how base prices grow at {escalationRate}% annually. Full escalation applies to all cells.</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b border-slate-100">
+                <th className="text-left py-2 pr-4 text-xs text-slate-500 font-medium">Year</th>
+                {ATTENDEE_TIERS.map(tier => (
+                  <th key={tier} className="text-center py-2 px-3 text-xs text-slate-500 font-medium">{tier} ({ATTENDEE_TIER_LABELS[tier]})</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {years.map(year => (
+                <tr key={year} className={`border-b border-slate-50 last:border-0 ${year === 2026 ? 'bg-indigo-50' : ''}`}>
+                  <td className="py-2 pr-4 text-xs font-semibold text-slate-600">{year}{year === 2026 ? ' (base)' : ''}</td>
+                  {ATTENDEE_TIERS.map(tier => (
+                    <td key={tier} className="py-2 px-3 text-center text-xs font-medium text-slate-700">
+                      {formatCurrency(getEscalatedPrice(ffpMatrix['CONUS']['1-day'][tier], year))}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+};
+
 // --- Main Application ---
 
 export default function CashFlowApp() {
   const [activeTab, setActiveTab] = useState('analysis');
   const [rawData, setRawData] = useState(null);
   const [delayDays, setDelayDays] = useState(90);
-  const [feePercent, setFeePercent] = useState(2.0);
-  const [laborProfitPercent, setLaborProfitPercent] = useState(15.0);
+  const [oconusPct, setOconusPct] = useState(5);
+  const [escalationRate, setEscalationRate] = useState(3);
+  const [ffpMatrix, setFfpMatrix] = useState(DEFAULT_FFP_MATRIX);
   const [isProcessing, setIsProcessing] = useState(false);
   const [fileName, setFileName] = useState("");
 
@@ -578,7 +741,7 @@ export default function CashFlowApp() {
     if (!fileName || fileName === "Generated Sample Data") {
       generateSampleData();
     }
-  }, [eventMix, eventsPerMonth, stdDevPercent]);
+  }, [eventMix, eventsPerMonth, stdDevPercent, oconusPct]);
 
   const generateSampleData = () => {
     try {
@@ -638,26 +801,49 @@ export default function CashFlowApp() {
           const totalCost = odcTotal + laborTotal;
 
           const location = LOCATIONS[Math.floor(Math.random() * LOCATIONS.length)];
-          const attendees = typeKey === 'Basic' ? Math.floor(20 + Math.random() * 80) : 
-                            typeKey === 'Standard' ? Math.floor(100 + Math.random() * 200) : 
+          const attendees = typeKey === 'Basic' ? Math.floor(20 + Math.random() * 80) :
+                            typeKey === 'Standard' ? Math.floor(100 + Math.random() * 200) :
                             Math.floor(300 + Math.random() * 700);
-          
+
+          // Duration tier based on event type with random variation
+          const durationRoll = Math.random();
+          const duration = typeKey === 'Basic'
+            ? (durationRoll < 0.6 ? 'Half-day' : '1-day')
+            : typeKey === 'Standard'
+              ? (durationRoll < 0.5 ? '1-day' : '2-day')
+              : (durationRoll < 0.3 ? '2-day' : '3+ days');
+
+          // OCONUS determination
+          const locationZone = Math.random() * 100 < oconusPct ? 'OCONUS' : 'CONUS';
+
+          // Attendee tier
+          const attendeeTier = getAttendeeTier(attendees);
+
+          // FFP price with annual escalation from base year
+          const yearsFromBase = year - startYear;
+          const basePrice = ffpMatrix[locationZone][duration][attendeeTier];
+          const ffpPrice = basePrice * Math.pow(1 + escalationRate / 100, yearsFromBase);
+
           const dayOfYear = Math.floor((i * 365) / eventsPerYear);
           const globalDay = (year - startYear) * 365 + dayOfYear;
           const eventId = `FY${year}_${(i + 1).toString().padStart(5, '0')}`;
 
-          sampleEvents.push({ 
-              d: globalDay, 
+          sampleEvents.push({
+              d: globalDay,
               c: totalCost,
               year,
               eventId,
               type: typeKey,
               location,
+              locationZone,
               attendees,
+              attendeeTier,
+              duration,
+              ffpPrice,
               breakdown: scaledODC,
               odcTotal: odcTotal,
               laborTotal: laborTotal,
-              delayZ 
+              delayZ
           });
         }
       }
@@ -709,18 +895,23 @@ export default function CashFlowApp() {
 
   const downloadCSV = () => {
     if (!rawData || !rawData.events) return;
-    const headers = ["Year", "Event_ID", "Event_Type", "Location", "Attendees", "Food", "Lodging", "Childcare", "Curriculum", "Meeting_Space", "AV", "Transportation", "Other", "ODC_Cost", "Labor_Cost", "Total_Cost"];
+    const headers = ["Year", "Event_ID", "Event_Type", "Location", "Location_Zone", "Duration", "Attendees", "Attendee_Tier", "Food", "Lodging", "Childcare", "Curriculum", "Meeting_Space", "AV", "Transportation", "Other", "ODC_Cost", "Labor_Cost", "Actual_Cost", "FFP_Price", "Margin"];
     const csvContent = [
         headers.join(","),
         ...rawData.events.map(e => {
-            if (!e.breakdown) return `${e.year || ''},${e.eventId || ''},Unknown,Unknown,0,,,,,,,,,0,0,${e.c.toFixed(2)}`;
+            const actualCost = e.odcTotal !== undefined ? (e.odcTotal + (e.laborTotal || 0)) : e.c;
+            const ffpPrice = e.ffpPrice || actualCost;
+            const margin = ffpPrice - actualCost;
+            if (!e.breakdown) return `${e.year || ''},${e.eventId || ''},Unknown,Unknown,CONUS,,0,,,,,,,,,,0,0,${actualCost.toFixed(2)},${ffpPrice.toFixed(2)},${margin.toFixed(2)}`;
             return [
-                e.year, e.eventId, e.type, `"${e.location}"`, e.attendees,
+                e.year, e.eventId, e.type, `"${e.location}"`, e.locationZone || 'CONUS',
+                e.duration || '', e.attendees, e.attendeeTier || '',
                 e.breakdown.Food?.toFixed(2) || 0, e.breakdown.Lodging?.toFixed(2) || 0,
                 e.breakdown.Childcare?.toFixed(2) || 0, e.breakdown.Curriculum?.toFixed(2) || 0,
                 e.breakdown.Meeting_Space?.toFixed(2) || 0, e.breakdown.AV?.toFixed(2) || 0,
                 e.breakdown.Transportation?.toFixed(2) || 0, e.breakdown.Other?.toFixed(2) || 0,
-                e.odcTotal.toFixed(2), e.laborTotal.toFixed(2), e.c.toFixed(2)
+                e.odcTotal.toFixed(2), e.laborTotal.toFixed(2), actualCost.toFixed(2),
+                ffpPrice.toFixed(2), margin.toFixed(2)
             ].join(",");
         })
     ].join("\n");
@@ -748,40 +939,35 @@ export default function CashFlowApp() {
 
       const dailyNetChange = new Float32Array(maxDay + 1);
       let totalProjectCost = 0;
+      let totalFFPRevenue = 0;
       let totalProjectProfit = 0;
 
       for (let i = 0; i < events.length; i++) {
         const event = events[i];
-        
-        // Strict consistency check: Use ODC + Labor if available, otherwise fallback to C
+
+        // Actual cost (what we pay out)
         const labor = event.laborTotal || 0;
         const odc = event.odcTotal !== undefined ? event.odcTotal : (event.c || 0);
-        
-        // For uploaded CSVs without breakdown, assume entire cost is ODC (incurs fee)
-        // For generated data, cost is strictly labor + odc
         const cost = (event.laborTotal !== undefined && event.odcTotal !== undefined) ? (labor + odc) : (event.c || 0);
 
         totalProjectCost += cost;
-        
-        // Outflow: We pay full cost
+
+        // Outflow: We pay full actual cost upfront
         if (event.d >= 0 && event.d <= maxDay) dailyNetChange[event.d] -= cost;
 
-        // Inflow: (Labor + ODC) + (ODC * Fee%) + (Labor * Labor Profit %)
-        // We get back exactly what we paid (Labor + ODC) PLUS profit on ODC AND profit on Labor
-        const odcProfit = odc * (feePercent / 100);
-        const laborProfit = labor * (laborProfitPercent / 100);
-        const totalProfit = odcProfit + laborProfit;
-        totalProjectProfit += totalProfit;
-
-        const inflow = (labor + odc) + totalProfit;
+        // Inflow: FFP price (fixed price billed to client)
+        // Fallback for uploaded CSVs: use cost as FFP (breakeven)
+        const ffpPrice = event.ffpPrice || cost;
+        totalFFPRevenue += ffpPrice;
+        totalProjectProfit += (ffpPrice - cost);
 
         // Gaussian Delay
         const delayZ = event.delayZ || 0;
-        const varianceFactor = 0.25; 
+        const varianceFactor = 0.25;
         const actualDelay = Math.max(1, Math.round(delayDays * (1 + delayZ * varianceFactor)));
         const inflowDay = event.d + actualDelay;
 
-        if (inflowDay <= maxDay) dailyNetChange[inflowDay] += inflow;
+        if (inflowDay <= maxDay) dailyNetChange[inflowDay] += ffpPrice;
       }
 
       const chartData = [];
@@ -820,12 +1006,15 @@ export default function CashFlowApp() {
       const avgEventCost = events.length > 0 ? totalProjectCost / events.length : 0;
       const avgEventProfit = events.length > 0 ? totalProjectProfit / events.length : 0;
       const floatDuration = avgEventProfit > 0 ? (avgEventCost * delayDays) / avgEventProfit : Infinity;
+      const grossMarginPct = totalFFPRevenue > 0 ? (totalProjectProfit / totalFFPRevenue) * 100 : 0;
 
       return {
         chartData,
         peakOutlay: minBalance,
-        totalProfit: currentBalance,
+        totalProfit: totalProjectProfit,
+        totalFFPRevenue,
         totalProjectCost,
+        grossMarginPct,
         peakDateLabel: chartData.find(d => d.dayIndex >= peakDayIndex)?.label || "N/A",
         breakEvenLabel,
         floatDuration: Math.round(floatDuration)
@@ -834,7 +1023,12 @@ export default function CashFlowApp() {
       console.error("Simulation error", e);
       return null;
     }
-  }, [rawData, delayDays, feePercent, laborProfitPercent]);
+  }, [rawData, delayDays]);
+
+  const handleApplyFFP = () => {
+    generateSampleData();
+    setActiveTab('analysis');
+  };
 
   const handleApplyCostToSim = () => {
     setEventMix(prev => ({
@@ -930,13 +1124,13 @@ export default function CashFlowApp() {
             <p className="text-xs text-slate-400 italic">Actual delay varies by event (±25%)</p>
           </div>
           <div className="space-y-3">
-            <div className="flex justify-between"><label className="text-sm font-medium text-slate-600">Service Fee (on ODC)</label><span className="font-bold text-emerald-600">{feePercent}%</span></div>
-            <input type="range" min="2" max="5" step="0.5" value={feePercent} onChange={(e) => setFeePercent(parseFloat(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
-          </div>
-          <div className="space-y-3">
-            <div className="flex justify-between"><label className="text-sm font-medium text-slate-600">Profit on Labor</label><span className="font-bold text-blue-600">{laborProfitPercent}%</span></div>
-            <input type="range" min="8" max="25" step="0.5" value={laborProfitPercent} onChange={(e) => setLaborProfitPercent(parseFloat(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-500" />
-            <div className="flex justify-between text-xs text-slate-400"><span>8%</span><span>25%</span></div>
+            <div className="flex justify-between items-center">
+              <label className="text-sm font-medium text-slate-600 flex items-center gap-1.5"><Globe size={14} className="text-slate-400" />OCONUS Events</label>
+              <span className="font-bold text-orange-600">{oconusPct}%</span>
+            </div>
+            <input type="range" min="0" max="20" step="1" value={oconusPct} onChange={(e) => setOconusPct(parseInt(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-orange-500" />
+            <div className="flex justify-between text-xs text-slate-400"><span>0% (all CONUS)</span><span>20%</span></div>
+            <p className="text-xs text-slate-400 italic">FFP prices set in FFP Pricing tab</p>
           </div>
           <div className="pt-4 border-t border-slate-100">
              <div className="flex items-center gap-2 mb-4"><Layers className="text-purple-600" size={20} /><h3 className="font-semibold text-lg">Event Mix & Costs</h3></div>
@@ -988,18 +1182,22 @@ export default function CashFlowApp() {
         </Card>
         {simulationResults && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-               <Card className="p-6 bg-blue-50 border-blue-100">
-                <div className="flex items-start justify-between"><div><p className="text-sm font-medium text-blue-600 mb-1">Total Project Cost</p><h2 className="text-2xl font-bold text-blue-800">{formatCompact(simulationResults.totalProjectCost)}</h2></div><div className="p-3 bg-white rounded-full shadow-sm text-blue-500"><FileText size={24} /></div></div>
-                <p className="text-xs text-blue-600 mt-2">Total ODCs of all events</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card className="p-5 bg-blue-50 border-blue-100">
+                <div className="flex items-start justify-between"><div><p className="text-xs font-medium text-blue-600 mb-1">Total FFP Revenue</p><h2 className="text-xl font-bold text-blue-800">{formatCompact(simulationResults.totalFFPRevenue)}</h2></div><div className="p-2 bg-white rounded-full shadow-sm text-blue-500"><BarChart2 size={20} /></div></div>
+                <p className="text-xs text-blue-600 mt-2">Billed to client (FFP)</p>
               </Card>
-              <Card className="p-6 bg-red-50 border-red-100">
-                <div className="flex items-start justify-between"><div><p className="text-sm font-medium text-red-600 mb-1">Peak Cash Outlay</p><h2 className="text-2xl font-bold text-red-700">{formatCompact(simulationResults.peakOutlay)}</h2></div><div className="p-3 bg-white rounded-full shadow-sm text-red-500"><TrendingDown size={24} /></div></div>
+              <Card className="p-5 bg-slate-50 border-slate-200">
+                <div className="flex items-start justify-between"><div><p className="text-xs font-medium text-slate-600 mb-1">Total Actual Cost</p><h2 className="text-xl font-bold text-slate-800">{formatCompact(simulationResults.totalProjectCost)}</h2></div><div className="p-2 bg-white rounded-full shadow-sm text-slate-500"><FileText size={20} /></div></div>
+                <p className="text-xs text-slate-500 mt-2">ODC + Labor (T&M basis)</p>
+              </Card>
+              <Card className="p-5 bg-red-50 border-red-100">
+                <div className="flex items-start justify-between"><div><p className="text-xs font-medium text-red-600 mb-1">Peak Cash Outlay</p><h2 className="text-xl font-bold text-red-700">{formatCompact(simulationResults.peakOutlay)}</h2></div><div className="p-2 bg-white rounded-full shadow-sm text-red-500"><TrendingDown size={20} /></div></div>
                 <p className="text-xs text-red-500 mt-2">Max deficit: {simulationResults.peakDateLabel}</p>
               </Card>
-              <Card className="p-6 bg-emerald-50 border-emerald-100">
-                <div className="flex items-start justify-between"><div><p className="text-sm font-medium text-emerald-600 mb-1">Total Net Profit</p><h2 className="text-2xl font-bold text-emerald-700">{formatCompact(simulationResults.totalProfit)}</h2></div><div className="p-3 bg-white rounded-full shadow-sm text-emerald-500"><DollarSign size={24} /></div></div>
-                <p className="text-xs text-emerald-600 mt-2">ODC fees ({feePercent}%) + Labor profit ({laborProfitPercent}%)</p>
+              <Card className="p-5 bg-emerald-50 border-emerald-100">
+                <div className="flex items-start justify-between"><div><p className="text-xs font-medium text-emerald-600 mb-1">Net Profit</p><h2 className="text-xl font-bold text-emerald-700">{formatCompact(simulationResults.totalProfit)}</h2></div><div className="p-2 bg-white rounded-full shadow-sm text-emerald-500"><DollarSign size={20} /></div></div>
+                <p className="text-xs text-emerald-600 mt-2">Margin: {simulationResults.grossMarginPct.toFixed(1)}% (FFP − Cost)</p>
               </Card>
             </div>
             <Card className="p-6 bg-slate-50 border border-slate-200">
@@ -1012,7 +1210,12 @@ export default function CashFlowApp() {
           </>
         )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-           {[{ label: "Total Events", value: rawData?.events ? rawData.events.length.toLocaleString() : "0" }, { label: "Est. Break Even", value: simulationResults?.breakEvenLabel || "N/A" }, { label: "Avg Cost", value: formatCurrency(simulationResults && rawData?.events?.length ? simulationResults.totalProjectCost / rawData.events.length : 0) }, { label: "Simulated Cost", value: formatCompact(simulationResults?.totalProjectCost || 0) }].map((stat, i) => (
+           {[
+             { label: "Total Events", value: rawData?.events ? rawData.events.length.toLocaleString() : "0" },
+             { label: "Est. Break Even", value: simulationResults?.breakEvenLabel || "N/A" },
+             { label: "Avg FFP Price", value: formatCurrency(simulationResults && rawData?.events?.length ? simulationResults.totalFFPRevenue / rawData.events.length : 0) },
+             { label: "Avg Actual Cost", value: formatCurrency(simulationResults && rawData?.events?.length ? simulationResults.totalProjectCost / rawData.events.length : 0) }
+           ].map((stat, i) => (
              <Card key={i} className="p-4 flex flex-col items-center justify-center text-center"><span className="text-slate-400 text-xs uppercase tracking-wider font-semibold">{stat.label}</span><span className="text-slate-700 font-bold text-lg">{stat.value}</span></Card>
            ))}
         </div>
@@ -1067,13 +1270,15 @@ export default function CashFlowApp() {
           <div><h1 className="text-3xl font-bold text-slate-900">Event Cash Flow Analyzer</h1><p className="text-slate-500 mt-1">Visualize capital outlay peaks across reimbursement scenarios</p></div>
           <div className="flex items-center gap-2"><div className="relative group"><input type="file" accept=".csv" onChange={handleFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" /><button className="flex items-center gap-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg transition-colors shadow-sm"><Upload size={18} /><span>{isProcessing ? "Processing..." : "Upload CSV Data"}</span></button></div>{fileName && (<Badge color="blue">{fileName}</Badge>)}</div>
         </div>
-        <div className="flex gap-4 border-b border-slate-200">
-          <button onClick={() => setActiveTab('analysis')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'analysis' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>Cash Flow Analysis</button>
-          <button onClick={() => setActiveTab('builder')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'builder' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>Event Cost Builder</button>
-          <button onClick={() => setActiveTab('labor')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'labor' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>Labor & Staffing</button>
-          <button onClick={() => setActiveTab('docs')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'docs' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>Documentation</button>
+        <div className="flex gap-4 border-b border-slate-200 overflow-x-auto">
+          <button onClick={() => setActiveTab('analysis')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${activeTab === 'analysis' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>Cash Flow Analysis</button>
+          <button onClick={() => setActiveTab('ffp')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${activeTab === 'ffp' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>FFP Pricing</button>
+          <button onClick={() => setActiveTab('builder')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${activeTab === 'builder' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>Event Cost Builder</button>
+          <button onClick={() => setActiveTab('labor')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${activeTab === 'labor' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>Labor & Staffing</button>
+          <button onClick={() => setActiveTab('docs')} className={`pb-3 px-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${activeTab === 'docs' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>Documentation</button>
         </div>
         {activeTab === 'analysis' && <AnalysisView />}
+        {activeTab === 'ffp' && <FFPMatrixView ffpMatrix={ffpMatrix} setFfpMatrix={setFfpMatrix} escalationRate={escalationRate} setEscalationRate={setEscalationRate} oconusPct={oconusPct} setOconusPct={setOconusPct} onApply={handleApplyFFP} />}
         {activeTab === 'builder' && <CostBuilderView />}
         {activeTab === 'labor' && (<LaborBuilderView laborCosts={laborCosts} updateLaborRole={updateLaborRole} removeLaborRole={removeLaborRole} addLaborRole={addLaborRole} handleApplyCostToSim={handleApplyCostToSim} totalLaborCost={totalLaborCost} builderProfile={builderProfile} switchProfile={switchProfile} />)}
         {activeTab === 'docs' && <DocsView />}
