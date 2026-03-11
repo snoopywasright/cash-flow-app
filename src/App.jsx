@@ -931,7 +931,7 @@ export default function CashFlowApp() {
           </div>
           <div className="space-y-3">
             <div className="flex justify-between"><label className="text-sm font-medium text-slate-600">Service Fee (on ODC)</label><span className="font-bold text-emerald-600">{feePercent}%</span></div>
-            <input type="range" min="2" max="5" step="0.5" value={feePercent} onChange={(e) => setFeePercent(parseFloat(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
+            <input type="range" min="0" max="10" step="0.5" value={feePercent} onChange={(e) => setFeePercent(parseFloat(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
           </div>
           <div className="space-y-3">
             <div className="flex justify-between"><label className="text-sm font-medium text-slate-600">Profit on Labor</label><span className="font-bold text-blue-600">{laborProfitPercent}%</span></div>
